@@ -1,0 +1,7 @@
+{
+ "$schema":"https://schema.tauri.app/config/2",
+ "productName":"Expense Tracker","version":"1.1.0","identifier":"local.expensetracker.portable",
+ "build":{"beforeDevCommand":"npm run dev","devUrl":"http://localhost:1420","beforeBuildCommand":"npm run build","frontendDist":"../dist"},
+ "app":{"windows":[{"title":"Expense Tracker","width":1180,"height":800,"minWidth":900,"minHeight":600}],"security":{"csp":"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'"}},
+ "bundle":{"active":false}
+}

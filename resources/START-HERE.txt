@@ -1,0 +1,12 @@
+Open ExpenseTracker.exe in a writable folder outside Program Files.
+The app creates data/ beside the executable and saves changes automatically.
+
+Date -> description -> amount -> Enter adds an entry. Use tags for collections.
+Scan receipt supports local Japanese/English OCR and always requires manual review.
+Photos and complete OCR text are not intentionally saved.
+
+Keep the entire portable folder together and back up data/ periodically.
+Windows x64 with Microsoft Edge WebView2 Runtime is required.
+
+No private workbook is included in the source repository. Local builds can embed
+an optional private workbook; treat such executables as private.
