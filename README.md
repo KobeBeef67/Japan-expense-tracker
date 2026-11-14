@@ -2,10 +2,14 @@
 
 Portable Windows expense tracker using Tauri 2, Svelte 5, TypeScript, and local JSON files. No runtime server, account, SQLite, cloud OCR, or external AI API is required.
 
+- **Build on your PC:** [SETUP.md](SETUP.md) covers Windows prerequisites, development, portable releases, tests, and troubleshooting.
+- **Understand the code:** [ARCHITECTURE.md](ARCHITECTURE.md) walks through startup, saves, OCR, tags, import, and recovery.
+- **Keep source readable:** `npm.cmd run format`, `npm.cmd run format:check`, and `npm.cmd run format:rust` use the project formatting configuration.
+
 ## Features
 
 - Monthly/history views, fast keyboard entry, restricted arithmetic, whole-yen rounding, editable categories, autocomplete, duplicate entry, and undo.
-- Offline Japanese/English receipt OCR with camera/image input and mandatory manual review.
+- Offline Japanese/English receipt OCR with camera controls, multiple photos of one receipt, and mandatory manual review.
 - Multiple tags, collection spending totals, bulk changes, rename/merge/removal, and any/all tag filters.
 - Autosave, atomic replacement, revision checks, file locking, dated backups, restore, and CSV export.
 - A fixed-layout legacy workbook importer preserving provenance, reporting month, undated entries, and unresolved amounts.
@@ -18,7 +22,7 @@ Executables and release archives are excluded too: a local build can embed a pri
 
 ## Run and build
 
-Requirements: Windows x64, Microsoft Edge WebView2, Node.js 22+, stable Rust MSVC, and Microsoft C++ Build Tools with Windows SDK.
+Requirements: Windows x64, Microsoft Edge WebView2, Node.js 22.12+, stable Rust MSVC, and Microsoft C++ Build Tools with Windows SDK.
 
 ```powershell
 npm.cmd ci
@@ -52,7 +56,7 @@ Savings = salary + other income + refunds − expenses, with no opening bank bal
 
 Tesseract.js, its WASM core, and Japanese/English LSTM resources are bundled locally in `public/ocr`, with model versions, hashes, and licenses. `scripts/prepare-ocr.mjs` prepares installed assets before development/build and makes no downloads.
 
-The camera starts after a deliberate action and requests video only. Images and complete OCR text remain in memory for review and are not intentionally saved. Every receipt requires confirmation. Webcam focus, lighting, framing, and resolution affect recognition. JPEG/PNG fallback is available; the current camera UI does not expose optical focus controls.
+The camera starts after a deliberate action and requests video only. Images and complete OCR text remain in memory for review and are not intentionally saved. Every receipt requires confirmation. For a long receipt, add up to six camera/file photos (60 MB total), such as the date and total separately, then recognize all. Photos are parsed independently into one reviewed entry. Repeated totals are not added; conflicting dates/totals require selection. Individual photos can be selected, cropped, rotated, or removed. Use Crop selected photo after capture or file selection; drag a rectangle or enter percentages. Apply crop changes only that photo, Cancel leaves it unchanged, and Restore full photo restores its original prepared pixels and resets rotation. Amount-only crops use English single-line recognition; a single distinct candidate automatically fills the amount field, while different unlabelled candidates require selection. A unique labelled total retains priority over unlabelled item prices. Every suggested amount remains editable and requires review before saving. Other crops use Japanese + English recognition. The original image file is never overwritten. Mixed camera/file input is recorded as `mixed`; image content remains unsaved. Webcam focus, lighting, framing, and resolution affect recognition. JPEG/PNG fallback is available; camera controls appear only when the device exposes them to WebView2. Focus modes, manual focus distance, exposure, brightness, zoom, and click-to-focus are hardware dependent. Accepted requests are checked against reported settings; unsupported or unconfirmed changes are labelled. These controls cannot add autofocus to a fixed-focus lens.
 
 `public/receipt-fixtures` contains generated examples, not real receipts or proof of webcam accuracy. Hardware verification remains separate from synthetic tests.
 
@@ -75,16 +79,16 @@ Core tests require no personal files. Headless UI checks use Playwright, mocked 
 
 ## Source map
 
-| Path | Responsibility |
-|---|---|
-| `src/App.svelte` | Main UI and save/undo orchestration |
-| `src/components/ReceiptScanner.svelte` | Capture, recognition, review, cleanup |
-| `src/components/TagSelector.svelte` | Shared tag selection |
-| `src/lib/arithmetic.ts` | Restricted expressions and rounding |
-| `src/lib/importer.ts` | Legacy workbook import/reconciliation |
-| `src/lib/receipt-*.ts` | Images, OCR, and field extraction |
-| `src/lib/tags.ts` | Tag operations, matching, spending totals |
-| `src-tauri/src/storage.rs` | Native persistence, recovery, backups |
-| `src-tauri/src/migration.rs` | Migration and tag/receipt validation |
+| Path                                   | Responsibility                            |
+| -------------------------------------- | ----------------------------------------- |
+| `src/App.svelte`                       | Main UI and save/undo orchestration       |
+| `src/components/ReceiptScanner.svelte` | Capture, recognition, review, cleanup     |
+| `src/components/TagSelector.svelte`    | Shared tag selection                      |
+| `src/lib/arithmetic.ts`                | Restricted expressions and rounding       |
+| `src/lib/importer.ts`                  | Legacy workbook import/reconciliation     |
+| `src/lib/receipt-*.ts`                 | Images, OCR, and field extraction         |
+| `src/lib/tags.ts`                      | Tag operations, matching, spending totals |
+| `src-tauri/src/storage.rs`             | Native persistence, recovery, backups     |
+| `src-tauri/src/migration.rs`           | Migration and tag/receipt validation      |
 
 See [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) and the bundled OCR notices for dependencies and third-party licensing.
