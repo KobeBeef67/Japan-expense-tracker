@@ -15,6 +15,7 @@
   import CameraControls from './CameraControls.svelte';
   import { cameraSettings, applyCameraSetting, focusPoint } from '../lib/camera-controls';
   import { mergeReceiptPages } from '../lib/receipt-pages';
+  import { pastedImages, readClipboardImages } from '../lib/receipt-clipboard';
   interface ReceiptPhoto {
     id: string;
     blob: Blob;
@@ -28,6 +29,8 @@
   let photos: ReceiptPhoto[] = [];
   let selectedPhoto = '';
   let cropping = false;
+  let clipboardReading = false;
+  $: clipboardBusy = saving || processing || cameraStarting || cropping || phase === 'recognizing';
   $: selected = photos.find((photo) => photo.id === selectedPhoto);
   let cameraBusy = false;
   let spotFocus = false;
@@ -202,10 +205,10 @@
   }
   async function setImage(blob: Blob, origin: ReceiptDraft['via']) {
     if (disposed) return;
+    const previousPhase = phase;
     invalidate();
     const token = generation;
     stopCamera();
-    resetDraft();
     error = '';
     processing = true;
     phase = 'image';
@@ -218,6 +221,7 @@
       if (prepared.size + photoBytes(photos) > MAX_SESSION_BYTES)
         throw new Error('Prepared photos exceed the 60 MB review limit.');
       if (token !== generation) return;
+      resetDraft();
       const photo = {
         id: crypto.randomUUID(),
         blob: prepared,
@@ -231,7 +235,10 @@
       via = photos.every((p) => p.via === origin) ? origin : 'mixed';
       status = `${photos.length} photo(s) of one receipt. Add the date or total view, then recognize all.`;
     } catch (e) {
-      if (token === generation) error = String(e instanceof Error ? e.message : e);
+      if (token === generation) {
+        error = String(e instanceof Error ? e.message : e);
+        phase = previousPhase === 'camera' ? (photos.length ? 'image' : 'choose') : previousPhase;
+      }
     } finally {
       if (token === generation) processing = false;
     }
@@ -318,11 +325,57 @@
     const input = e.target as HTMLInputElement;
     const selected = [...(input.files || [])];
     input.value = '';
-    for (const file of selected) {
+    await addImages(selected, 'file');
+  }
+  async function addImages(images: Blob[], origin: ReceiptDraft['via']) {
+    for (const file of images) {
       if (disposed) break;
       const expectedGeneration = generation + 1;
-      await setImage(file, 'file');
+      await setImage(file, origin);
       if (error || generation !== expectedGeneration) break;
+    }
+  }
+  function pasteImage(event: ClipboardEvent) {
+    const images = pastedImages(event.clipboardData);
+    if (!images.length) return; // Preserve ordinary text paste in form fields.
+    event.preventDefault();
+    if (clipboardBusy || clipboardReading) {
+      error = 'Finish or cancel the current operation before pasting another image.';
+      return;
+    }
+    void addImages(images, 'clipboard');
+  }
+  async function pasteFromClipboard() {
+    if (clipboardBusy || clipboardReading) return;
+    const token = generation;
+    clipboardReading = true;
+    error = '';
+    try {
+      if (!navigator.clipboard?.read)
+        throw new Error(
+          'Clipboard button is unavailable here. Copy an image, focus this scanner, and press Ctrl+V.',
+        );
+      // This API is called only from the user's button click, never on open or in the background.
+      const items = await navigator.clipboard.read();
+      if (disposed || token !== generation) return;
+      const images = await readClipboardImages(items);
+      if (disposed || token !== generation) return;
+      if (!images.length)
+        throw new Error(
+          'No image found on the clipboard. Copy a screenshot or image, then paste again.',
+        );
+      await addImages(images, 'clipboard');
+    } catch (failure) {
+      if (!disposed && token === generation) {
+        error =
+          failure instanceof DOMException && failure.name === 'NotAllowedError'
+            ? 'Clipboard access was denied. Copy an image and press Ctrl+V in this scanner, or choose a file.'
+            : failure instanceof Error
+              ? failure.message
+              : String(failure);
+      }
+    } finally {
+      clipboardReading = false;
     }
   }
   async function focusAt(event: MouseEvent) {
@@ -549,6 +602,7 @@
 </script>
 
 <svelte:window
+  onpaste={pasteImage}
   onkeydowncapture={keydown}
   onpagehide={() => {
     invalidate();
@@ -578,6 +632,17 @@
       cancel. No photos or full OCR text are saved.
     </p>
     {#if error}<div class="error" role="alert">{error}</div>{/if}
+    <div class="clipboard-controls">
+      <button
+        disabled={clipboardBusy || clipboardReading || photos.length >= MAX_PHOTOS}
+        onclick={pasteFromClipboard}
+        >{clipboardReading ? 'Reading clipboard…' : 'Paste image'}</button
+      >
+      <small
+        >Or press Ctrl+V with a copied screenshot or image while this scanner is open. Pasting adds
+        a photo to this receipt.</small
+      >
+    </div>
     {#if phase === 'choose'}
       <div class="choose">
         <button class="primary" onclick={startCamera}>Start camera</button><button
@@ -888,6 +953,12 @@
     flex-wrap: wrap;
     gap: 9px;
     margin: 14px 0;
+  }
+  .clipboard-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin: 12px 0;
   }
   .camera {
     position: relative;

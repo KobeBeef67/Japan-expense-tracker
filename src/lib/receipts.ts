@@ -8,5 +8,5 @@ export interface ReceiptDraft {
   category: string;
   type: Kind;
   tagNames: string[];
-  via: 'camera' | 'file' | 'synthetic' | 'mixed';
+  via: 'camera' | 'file' | 'clipboard' | 'synthetic' | 'mixed';
 }

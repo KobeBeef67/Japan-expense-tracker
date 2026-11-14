@@ -87,6 +87,37 @@ await page.addInitScript(() => {
   window.cameraMode = 'deny';
   window.cameraRequests = [];
   window.fakeTracks = [];
+  window.clipboardMode = 'image';
+  window.clipboardReads = 0;
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    get: () => ({
+      read:
+        window.clipboardMode === 'unavailable'
+          ? undefined
+          : async () => {
+              window.clipboardReads++;
+              if (window.clipboardMode === 'denied')
+                throw new DOMException('Synthetic denial', 'NotAllowedError');
+              if (window.clipboardMode === 'empty') return [];
+              if (window.clipboardMode === 'hold')
+                return new Promise((resolve) => {
+                  window.resolveClipboard = resolve;
+                });
+              const image = await (await fetch('/receipt-fixtures/english.png')).blob();
+              return [
+                {
+                  types: ['image/png', 'text/html'],
+                  getType: async (type) => {
+                    if (type !== 'image/png')
+                      throw new Error('Unexpected clipboard representation');
+                    return image;
+                  },
+                },
+              ];
+            },
+    }),
+  });
   window.cameraChanges = [];
   window.__TAURI_INTERNALS__ = {
     invoke: async (cmd, args = {}) => {
@@ -443,6 +474,173 @@ try {
       'base64',
     ),
   });
+  const pasteImages = async (count = 1, invalid = false, oversized = false) =>
+    page.evaluate(
+      async ({ count, invalid, oversized }) => {
+        const image = oversized
+          ? new Blob([new Uint8Array(20 * 1024 * 1024 + 1)], { type: 'image/png' })
+          : invalid
+            ? new Blob(['invalid image'], { type: 'image/png' })
+            : await (await fetch('/receipt-fixtures/english.png')).blob();
+        const data = new DataTransfer();
+        for (let index = 0; index < count; index++)
+          data.items.add(new File([image], `screenshot-${index}.png`, { type: 'image/png' }));
+        const event = new ClipboardEvent('paste', {
+          clipboardData: data,
+          bubbles: true,
+          cancelable: true,
+        });
+        document.activeElement.dispatchEvent(event);
+        return event.defaultPrevented;
+      },
+      { count, invalid, oversized },
+    );
+  await check(
+    'image paste adds photos, preserves text paste and existing drafts on rejection, and respects limits',
+    async () => {
+      const reads = await page.evaluate(() => window.clipboardReads);
+      await page.getByRole('button', { name: 'Scan receipt', exact: true }).click();
+      assert.equal(await page.evaluate(() => window.clipboardReads), reads);
+      assert.equal(await pasteImages(), true);
+      await receiptDialog().getByRole('button', { name: 'Photo 1', exact: true }).waitFor();
+      await receiptDialog().getByRole('button', { name: 'Enter manually', exact: true }).click();
+      const description = receiptDialog().getByLabel('Description (optional)', { exact: true });
+      await description.fill('Keep this draft');
+      const textPrevented = await description.evaluate((input) => {
+        const data = new DataTransfer();
+        data.setData('text/plain', 'ordinary text');
+        const event = new ClipboardEvent('paste', {
+          clipboardData: data,
+          bubbles: true,
+          cancelable: true,
+        });
+        input.dispatchEvent(event);
+        return event.defaultPrevented;
+      });
+      assert.equal(textPrevented, false);
+      await pasteImages(1, true);
+      await receiptDialog()
+        .getByRole('alert')
+        .filter({ hasText: 'readable JPEG or PNG' })
+        .waitFor();
+      assert.equal(await description.inputValue(), 'Keep this draft');
+      await pasteImages(1, false, true);
+      await receiptDialog().getByRole('alert').filter({ hasText: '20 MB' }).waitFor();
+      assert.equal(await description.inputValue(), 'Keep this draft');
+      await receiptDialog()
+        .getByRole('button', { name: 'Crop selected photo', exact: true })
+        .click();
+      await pasteImages();
+      await receiptDialog().getByRole('alert').filter({ hasText: 'Finish or cancel' }).waitFor();
+      await receiptDialog().getByRole('button', { name: 'Cancel crop', exact: true }).click();
+      await pasteImages(6);
+      await receiptDialog().getByRole('button', { name: 'Photo 6', exact: true }).waitFor();
+      await receiptDialog().getByRole('alert').filter({ hasText: 'Use up to 6 photos' }).waitFor();
+      assert.equal(
+        await receiptDialog().getByRole('button', { name: 'Photo 7', exact: true }).count(),
+        0,
+      );
+      await receiptDialog().getByRole('button', { name: 'Close scanner', exact: true }).click();
+      assert.equal(await pasteImages(), false);
+      assert.equal(await page.evaluate(() => window.clipboardReads), reads);
+    },
+  );
+  await check(
+    'explicit clipboard access has denied/empty/unsupported fallbacks and ignores late results after close',
+    async () => {
+      await page.getByRole('button', { name: 'Scan receipt', exact: true }).click();
+      for (const [mode, message] of [
+        ['denied', 'Clipboard access was denied'],
+        ['empty', 'No image found'],
+        ['unavailable', 'Clipboard button is unavailable'],
+      ]) {
+        await page.evaluate((mode) => (window.clipboardMode = mode), mode);
+        await receiptDialog().getByRole('button', { name: 'Paste image', exact: true }).click();
+        await receiptDialog().getByRole('alert').filter({ hasText: message }).waitFor();
+      }
+      await page.evaluate(() => (window.clipboardMode = 'hold'));
+      await receiptDialog().getByRole('button', { name: 'Paste image', exact: true }).click();
+      await receiptDialog()
+        .getByRole('button', { name: 'Reading clipboard…', exact: true })
+        .waitFor();
+      await receiptDialog().getByRole('button', { name: 'Close scanner', exact: true }).click();
+      await page.evaluate(() => window.resolveClipboard([]));
+      await page.getByRole('button', { name: 'Scan receipt', exact: true }).click();
+      await receiptDialog().getByRole('button', { name: 'Start camera', exact: true }).waitFor();
+      assert.equal(
+        await receiptDialog().getByRole('button', { name: 'Photo 1', exact: true }).count(),
+        0,
+      );
+      await receiptDialog().getByRole('button', { name: 'Close scanner', exact: true }).click();
+    },
+  );
+  await check(
+    'clipboard screenshot OCR fills date/total and saves only reviewed provenance',
+    async () => {
+      const count = await page.evaluate(() => window.testLedger.transactions.length);
+      await page.evaluate(() => (window.clipboardMode = 'image'));
+      await page.getByRole('button', { name: 'Scan receipt', exact: true }).click();
+      await receiptDialog().getByRole('button', { name: 'Paste image', exact: true }).click();
+      await receiptDialog().getByRole('button', { name: 'Photo 1', exact: true }).waitFor();
+      await receiptDialog().getByRole('button', { name: 'Recognize offline', exact: true }).click();
+      await receiptDialog()
+        .getByText('Review required', { exact: true })
+        .waitFor({ timeout: 60000 });
+      assert.equal(
+        await receiptDialog().getByLabel('Date (optional)', { exact: true }).inputValue(),
+        '2026-11-14',
+      );
+      assert.equal(
+        await receiptDialog().getByLabel('Final total / calculation', { exact: true }).inputValue(),
+        '1280',
+      );
+      assert.equal(await page.evaluate(() => window.testLedger.transactions.length), count);
+      await receiptDialog().getByLabel('Category', { exact: true }).fill('Clipboard');
+      await receiptDialog()
+        .getByLabel('Description (optional)', { exact: true })
+        .fill('Digital receipt test');
+      await receiptDialog()
+        .getByRole('checkbox', { name: /I reviewed the date/ })
+        .check();
+      await receiptDialog().getByRole('button', { name: 'Confirm and save', exact: true }).click();
+      await receiptDialog().waitFor({ state: 'hidden' });
+      const saved = await page.evaluate(() => window.testLedger.transactions.at(-1));
+      assert.equal(saved.receipt.input, 'clipboard');
+      assert.equal(saved.amount, 1280);
+      assert.deepEqual(Object.keys(saved.receipt).sort(), [
+        'engine',
+        'input',
+        'origin',
+        'reviewedAt',
+      ]);
+      assert.ok(!JSON.stringify(saved).includes('SYNTHETIC TEST RECEIPT'));
+    },
+  );
+  await check('file plus pasted image stays one receipt with mixed provenance', async () => {
+    await page.getByRole('button', { name: 'Scan receipt', exact: true }).click();
+    await page
+      .locator('input[type=file][accept="image/jpeg,image/png"]')
+      .setInputFiles('public/receipt-fixtures/english.png');
+    await receiptDialog().getByRole('button', { name: 'Photo 1', exact: true }).waitFor();
+    await pasteImages();
+    await receiptDialog().getByRole('button', { name: 'Photo 2', exact: true }).waitFor();
+    await receiptDialog().getByRole('button', { name: 'Recognize offline', exact: true }).click();
+    await receiptDialog().getByText('Review required', { exact: true }).waitFor({ timeout: 60000 });
+    assert.equal(
+      await receiptDialog().getByLabel('Final total / calculation', { exact: true }).inputValue(),
+      '1280',
+    );
+    await receiptDialog().getByLabel('Category', { exact: true }).fill('Mixed');
+    await receiptDialog()
+      .getByRole('checkbox', { name: /I reviewed the date/ })
+      .check();
+    await receiptDialog().getByRole('button', { name: 'Confirm and save', exact: true }).click();
+    await receiptDialog().waitFor({ state: 'hidden' });
+    assert.equal(
+      await page.evaluate(() => window.testLedger.transactions.at(-1).receipt.input),
+      'mixed',
+    );
+  });
   await check(
     'one unlabelled amount fills automatically without saving and remains editable',
     async () => {
@@ -634,7 +832,7 @@ try {
         passed: true,
         environment:
           'Headless Edge, release assets/CSP, mocked IPC and synthetic camera; no desktop control',
-        checks: 12,
+        checks: 16,
         issues,
       },
       null,

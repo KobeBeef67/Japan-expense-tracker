@@ -7,7 +7,7 @@ export type Kind = 'expense' | 'salary' | 'income' | 'refund';
 /** Only review metadata is retained: never an image, merchant database, or full OCR transcript. */
 export interface ReceiptOrigin {
   origin: 'receipt-scan';
-  input: 'camera' | 'file' | 'synthetic' | 'mixed';
+  input: 'camera' | 'file' | 'clipboard' | 'synthetic' | 'mixed';
   engine: 'tesseract.js-6.0.1';
   reviewedAt: string;
 }

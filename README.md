@@ -9,7 +9,7 @@ Portable Windows expense tracker using Tauri 2, Svelte 5, TypeScript, and local 
 ## Features
 
 - Monthly/history views, fast keyboard entry, restricted arithmetic, whole-yen rounding, editable categories, autocomplete, duplicate entry, and undo.
-- Offline Japanese/English receipt OCR with camera controls, multiple photos of one receipt, and mandatory manual review.
+- Offline Japanese/English receipt OCR with camera controls, clipboard image paste, multiple photos of one receipt, and mandatory manual review.
 - Multiple tags, collection spending totals, bulk changes, rename/merge/removal, and any/all tag filters.
 - Autosave, atomic replacement, revision checks, file locking, dated backups, restore, and CSV export.
 - A fixed-layout legacy workbook importer preserving provenance, reporting month, undated entries, and unresolved amounts.
@@ -92,3 +92,11 @@ Core tests require no personal files. Headless UI checks use Playwright, mocked 
 | `src-tauri/src/migration.rs`           | Migration and tag/receipt validation      |
 
 See [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) and the bundled OCR notices for dependencies and third-party licensing.
+
+## Clipboard screenshots (v1.3)
+
+Open Scan receipt and press **Ctrl+V** with a copied screenshot/image, or click **Paste image**. Each paste adds a photo to the current receipt, where it can be cropped, rotated, removed, and recognized alongside other photos. Text paste in form fields is unaffected. Clipboard images use the same PNG/JPEG validation, six-photo limit, and 60 MB review limit as files/camera images.
+
+Clipboard access occurs only on paste or the button click. There is no background monitoring, clipboard writing, HTML import, or remote image URL fetching. Button access may need WebView2 permission; if it is unavailable/denied, Ctrl+V or file selection remains available. Images and full OCR text stay in memory. Persisted receipt input is `clipboard`, or `mixed` with other sources. Use v1.3 or newer to open ledgers containing this new provenance value.
+
+OCR accepts screenshot pixels using the existing local models. Crop relevant text, keep its original resolution, and review the output. If the source already offers selectable text, copying that text avoids image recognition errors; this version's paste feature imports images, not text.

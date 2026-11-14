@@ -56,7 +56,7 @@ pub fn validate_tags_and_receipts(v: &Value) -> Result<(), String> {
                 return Err("Receipt metadata may contain only origin, input, engine, and reviewedAt; no images or OCR text".into());
             }
             if receipt["origin"] != "receipt-scan"
-                || !["camera", "file", "synthetic", "mixed"]
+                || !["camera", "file", "clipboard", "synthetic", "mixed"]
                     .contains(&receipt["input"].as_str().unwrap_or(""))
             {
                 return Err("Invalid receipt origin".into());
@@ -179,6 +179,19 @@ mod tests {
             assert_eq!(before, after);
         }
         assert_eq!(a["deletedSourceIds"], old["deletedSourceIds"]);
+    }
+    #[test]
+    fn clipboard_and_mixed_receipt_metadata_are_valid_without_image_payloads() {
+        for input in ["clipboard", "mixed"] {
+            let mut v = upgrade(&legacy()).unwrap();
+            v["transactions"][0]["receipt"] = json!({
+                "origin": "receipt-scan", "input": input, "engine": "tesseract.js-6.0.1",
+                "reviewedAt": "2026-11-15T00:00:00Z"
+            });
+            assert!(crate::storage::validate(&v).is_ok());
+            v["transactions"][0]["receipt"]["image"] = json!("forbidden");
+            assert!(crate::storage::validate(&v).is_err());
+        }
     }
     #[test]
     fn invalid_membership_names_and_receipt_payload_rejected() {
