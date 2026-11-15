@@ -914,20 +914,20 @@
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: #16291fd0;
+    background: var(--overlay);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 24px;
   }
   .scanner {
-    background: #fafcf8;
+    background: var(--surface);
     border-radius: 12px;
     width: min(1100px, 100%);
     max-height: 94vh;
     overflow: auto;
     padding: 22px;
-    color: #24372b;
+    color: var(--text);
     box-shadow: 0 12px 70px #0006;
   }
   header {
@@ -943,7 +943,7 @@
     margin-top: 0;
   }
   .privacy {
-    background: #e8f0e2;
+    background: var(--surface-muted);
     padding: 10px 12px;
     font-size: 11px;
   }
@@ -1012,7 +1012,7 @@
     display: none;
   }
   .photo {
-    background: #e4e9df;
+    background: var(--photo-surround);
     padding: 8px;
     border-radius: 8px;
   }
@@ -1047,8 +1047,8 @@
   }
   .warning {
     padding: 10px;
-    background: #fff0d1;
-    color: #80602b;
+    background: var(--warning-bg);
+    color: var(--warning-text);
     font-size: 12px;
     line-height: 1.5;
   }
@@ -1074,16 +1074,16 @@
   }
   .limits {
     margin-top: 16px;
-    color: #83907c;
+    color: var(--subtle);
   }
   .error {
-    background: #fbe8e0;
-    color: #98442d;
+    background: var(--danger-bg);
+    color: var(--danger-text);
     padding: 12px;
   }
   progress {
     width: 100%;
-    accent-color: #315e46;
+    accent-color: var(--accent-solid);
   }
   details button {
     margin: 5px;

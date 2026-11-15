@@ -1,0 +1,56 @@
+/* Shared UI palette. Receipt pixels and camera/crop overlays never use theme filters. */
+:root {
+  color-scheme: light;
+  accent-color: var(--accent);
+  --page: #f3f5f1;
+  --sidebar: #eaf0e7;
+  --surface: #ffffff;
+  --surface-raised: #f4f7f1;
+  --surface-muted: #edf2e9;
+  --selected: #d6e2d0;
+  --border: #cbd8cb;
+  --border-soft: #e0e7dc;
+  --text: #21332f;
+  --muted: #526456;
+  --subtle: #536254;
+  --accent: #326047;
+  --accent-solid: #245a44;
+  --accent-hover: #1c4b37;
+  --on-accent: #ffffff;
+  --positive: #326c44;
+  --negative: #a14330;
+  --warning-text: #77551c;
+  --warning-bg: #fff0d1;
+  --danger-text: #913d27;
+  --danger-bg: #fbe8e0;
+  --focus: #527d58;
+  --overlay: #16291fd0;
+  --photo-surround: #e4e9df;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page: #101815;
+  --sidebar: #14201b;
+  --surface: #17231e;
+  --surface-raised: #1d2c25;
+  --surface-muted: #203127;
+  --selected: #2b4736;
+  --border: #42594b;
+  --border-soft: #304439;
+  --text: #e3eee7;
+  --muted: #b2c4b8;
+  --subtle: #a6bcad;
+  --accent: #a0d4b0;
+  --accent-solid: #356c4c;
+  --accent-hover: #3d7754;
+  --on-accent: #ffffff;
+  --positive: #a0d4b0;
+  --negative: #ffb4a3;
+  --warning-text: #f1d394;
+  --warning-bg: #3c3220;
+  --danger-text: #ffbdad;
+  --danger-bg: #402720;
+  --focus: #a0d4b0;
+  --overlay: #07110bd9;
+  --photo-surround: #203127;
+}

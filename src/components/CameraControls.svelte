@@ -91,7 +91,7 @@
     flex-wrap: wrap;
     gap: 12px;
     margin: 12px 0;
-    border: 1px solid #bdcbb7;
+    border: 1px solid var(--border);
     border-radius: 6px;
   }
   label {

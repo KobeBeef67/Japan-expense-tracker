@@ -194,7 +194,7 @@
   }
   fieldset {
     margin: 0;
-    border: 1px solid #abb9a4;
+    border: 1px solid var(--border);
     border-radius: 6px;
   }
   .coordinates {

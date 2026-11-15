@@ -8,6 +8,8 @@ Portable Windows expense tracker using Tauri 2, Svelte 5, TypeScript, and local 
 
 ## Features
 
+- Light and Dark themes, saved locally in settings and applied across app views and the receipt scanner.
+
 - Monthly/history views, fast keyboard entry, restricted arithmetic, whole-yen rounding, editable categories, autocomplete, duplicate entry, and undo.
 - Offline Japanese/English receipt OCR with camera controls, clipboard image paste, multiple photos of one receipt, and mandatory manual review.
 - Multiple tags, collection spending totals, bulk changes, rename/merge/removal, and any/all tag filters.
@@ -100,3 +102,9 @@ Open Scan receipt and press **Ctrl+V** with a copied screenshot/image, or click 
 Clipboard access occurs only on paste or the button click. There is no background monitoring, clipboard writing, HTML import, or remote image URL fetching. Button access may need WebView2 permission; if it is unavailable/denied, Ctrl+V or file selection remains available. Images and full OCR text stay in memory. Persisted receipt input is `clipboard`, or `mixed` with other sources. Use v1.3 or newer to open ledgers containing this new provenance value.
 
 OCR accepts screenshot pixels using the existing local models. Crop relevant text, keep its original resolution, and review the output. If the source already offers selectable text, copying that text avoids image recognition errors; this version's paste feature imports images, not text.
+
+## Appearance (v1.4.1)
+
+Use the **Dark mode** switch in the header to toggle Light/Dark. It supports click, Space and Enter. Missing preferences and the retired System value default to Light; Windows appearance changes do not override your choice. Windows builds save the preference atomically in `data/settings.json` with a dated settings backup; transactions and accounting totals are unchanged. Browser preview preferences last only in the current tab.
+
+Shared colours live in `src/theme.css`. Receipt photos, camera frames, crop pixels and OCR input are not inverted or recoloured. The theme affects surrounding controls and panels only. A failed settings save keeps the previously saved appearance and shows an error.

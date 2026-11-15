@@ -44,7 +44,10 @@ const server = createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
-const context = await browser.newContext({ viewport: { width: 1250, height: 1000 } });
+const context = await browser.newContext({
+  viewport: { width: 1250, height: 1000 },
+  colorScheme: 'light',
+});
 const page = await context.newPage();
 page.setDefaultTimeout(20000);
 const issues = [];
@@ -82,6 +85,14 @@ await page.addInitScript(() => {
     imports: [],
   };
   window.testSaves = 0;
+  window.testSettings = JSON.parse(
+    sessionStorage.getItem('mock-settings') ||
+      JSON.stringify({
+        schemaVersion: 1,
+        categories: ['Food', 'Housing', 'Transport', 'Shopping'],
+      }),
+  );
+  window.failNextSettingsSave = false;
   window.failNextSave = false;
   window.lastExport = '';
   window.cameraMode = 'deny';
@@ -124,10 +135,19 @@ await page.addInitScript(() => {
       if (cmd === 'load')
         return {
           ledger: structuredClone(window.testLedger),
-          settings: { schemaVersion: 1, categories: ['Food', 'Housing', 'Transport', 'Shopping'] },
+          settings: structuredClone(window.testSettings),
           path: 'isolated test data',
           recovery: '',
         };
+      if (cmd === 'save_settings') {
+        if (window.failNextSettingsSave) {
+          window.failNextSettingsSave = false;
+          throw new Error('Synthetic settings-save failure');
+        }
+        window.testSettings = structuredClone(args.settings);
+        sessionStorage.setItem('mock-settings', JSON.stringify(window.testSettings));
+        return;
+      }
       if (cmd === 'save') {
         if (window.failNextSave) {
           window.failNextSave = false;
@@ -824,6 +844,156 @@ try {
       assert.ok(!JSON.stringify(saved).includes('SYNTHETIC TEST RECEIPT'));
     },
   );
+  const checkContrast = async () => {
+    const ratios = await page.evaluate(() => {
+      const css = getComputedStyle(document.documentElement);
+      const rgb = (name) =>
+        css
+          .getPropertyValue(name)
+          .trim()
+          .replace('#', '')
+          .match(/../g)
+          .map((hex) => parseInt(hex, 16) / 255);
+      const luminance = (name) =>
+        rgb(name)
+          .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+          .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+      return [
+        ['--text', '--surface'],
+        ['--muted', '--surface'],
+        ['--subtle', '--page'],
+        ['--subtle', '--selected'],
+        ['--muted', '--surface-muted'],
+        ['--text', '--selected'],
+        ['--warning-text', '--warning-bg'],
+        ['--danger-text', '--danger-bg'],
+        ['--negative', '--surface'],
+        ['--on-accent', '--accent-solid'],
+        ['--on-accent', '--accent-hover'],
+      ].map(([fg, bg]) => {
+        const a = luminance(fg),
+          b = luminance(bg);
+        return { fg, bg, ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+      });
+    });
+    for (const pair of ratios)
+      assert.ok(pair.ratio >= 4.5, `${pair.fg} on ${pair.bg} contrast ${pair.ratio}`);
+  };
+  await check(
+    'dark theme covers app and scanner, preserves pixels/accounting, persists on reload, and rolls back failed saves',
+    async () => {
+      const before = await page.evaluate(() => JSON.stringify(window.testLedger));
+      const theme = page.getByRole('switch', { name: 'Dark mode', exact: true });
+      await theme.click();
+      await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+      await checkContrast();
+      assert.equal(
+        await page.locator('body').evaluate((node) => getComputedStyle(node).backgroundColor),
+        'rgb(16, 24, 21)',
+      );
+      assert.equal(await page.evaluate(() => JSON.stringify(window.testLedger)), before);
+      for (const [name, screenshot] of [
+        ['Monthly ledger', 'month'],
+        ['All history', 'history'],
+        ['Tags & collections', 'tags'],
+        ['Import & reconcile', 'import'],
+        ['Backups & restore', 'backups'],
+      ]) {
+        await page
+          .getByRole('navigation', { name: 'Main navigation' })
+          .getByRole('button', { name: new RegExp(name) })
+          .click();
+        await page.screenshot({ path: `test-results/dark-${screenshot}-ui.png`, fullPage: true });
+      }
+      await page
+        .getByRole('navigation', { name: 'Main navigation' })
+        .getByRole('button', { name: /Monthly ledger/ })
+        .click();
+      await page.getByRole('button', { name: 'Scan receipt', exact: true }).click();
+      await page
+        .locator('input[type=file][accept="image/jpeg,image/png"]')
+        .setInputFiles('public/receipt-fixtures/english.png');
+      await receiptDialog().getByRole('button', { name: 'Photo 1', exact: true }).waitFor();
+      assert.equal(
+        await receiptDialog().evaluate((node) => getComputedStyle(node).backgroundColor),
+        'rgb(23, 35, 30)',
+      );
+      const paper = await receiptDialog()
+        .getByAltText('Receipt being reviewed; not saved', { exact: true })
+        .evaluate(async (img) => {
+          await img.decode();
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          return {
+            filter: getComputedStyle(img).filter,
+            pixel: [...ctx.getImageData(0, 0, 1, 1).data],
+          };
+        });
+      assert.equal(paper.filter, 'none');
+      assert.deepEqual(paper.pixel, [255, 255, 255, 255]);
+      await receiptDialog()
+        .getByRole('button', { name: 'Crop selected photo', exact: true })
+        .click();
+      await page.screenshot({ path: 'test-results/dark-crop-ui.png', fullPage: true });
+      await receiptDialog().getByRole('button', { name: 'Cancel crop', exact: true }).click();
+      await receiptDialog().getByRole('button', { name: 'Recognize offline', exact: true }).click();
+      await receiptDialog()
+        .getByText('Review required', { exact: true })
+        .waitFor({ timeout: 60000 });
+      assert.equal(
+        await receiptDialog().getByLabel('Final total / calculation', { exact: true }).inputValue(),
+        '1280',
+      );
+      await page.screenshot({ path: 'test-results/dark-scanner-ui.png', fullPage: true });
+      await receiptDialog().getByRole('button', { name: 'Close scanner', exact: true }).click();
+      assert.equal(await page.evaluate(() => JSON.stringify(window.testLedger)), before);
+      await page.reload();
+      await page.getByText('● Saved locally', { exact: true }).waitFor();
+      assert.equal(await theme.getAttribute('aria-checked'), 'true');
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+      await page.evaluate(() => (window.failNextSettingsSave = true));
+      await theme.click();
+      await page
+        .getByRole('alert')
+        .filter({ hasText: 'Synthetic settings-save failure' })
+        .waitFor();
+      assert.equal(await theme.getAttribute('aria-checked'), 'true');
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+      assert.equal(await page.evaluate(() => window.testSettings.theme), 'dark');
+      await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+      await page.getByRole('button', { name: 'Edit categories', exact: true }).click();
+      await page
+        .getByLabel('Separate categories with commas', { exact: false })
+        .fill('Food, Housing, Transport, Shopping, Theme test');
+      await page.getByRole('button', { name: 'Save categories', exact: true }).click();
+      await page.getByText('Categories saved', { exact: true }).waitFor();
+      assert.equal(await page.evaluate(() => window.testSettings.theme), 'dark');
+    },
+  );
+  await check(
+    'theme switch supports keyboard toggling and ignores system appearance changes',
+    async () => {
+      const theme = page.getByRole('switch', { name: 'Dark mode', exact: true });
+      await page.emulateMedia({ colorScheme: 'light' });
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+      await theme.click();
+      await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+      await checkContrast();
+      await page.emulateMedia({ colorScheme: 'dark' });
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
+      await theme.focus();
+      await page.keyboard.press('Space');
+      await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+      assert.equal(await theme.getAttribute('aria-checked'), 'true');
+      await theme.click();
+      await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+      await page.screenshot({ path: 'test-results/light-theme-ui.png', fullPage: true });
+      assert.equal(await page.evaluate(() => window.testSaves), 0);
+    },
+  );
   await mkdir('test-results', { recursive: true });
   await writeFile(
     'test-results/headless-ui-report.json',
@@ -832,7 +1002,7 @@ try {
         passed: true,
         environment:
           'Headless Edge, release assets/CSP, mocked IPC and synthetic camera; no desktop control',
-        checks: 16,
+        checks: 18,
         issues,
       },
       null,

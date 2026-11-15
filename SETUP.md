@@ -220,3 +220,9 @@ Cancel crop preserves the current draft and photo. Restore full photo resets cro
 In the separate test build, copy an image with Windows Snipping Tool or another app, open Scan receipt, and press Ctrl+V. Check the preview, crop if needed, then Recognize offline. Paste a second image to combine receipt sections. Try Paste image too; grant any clipboard permission yourself. If the button is unsupported or denied, use Ctrl+V or file selection. Plain text should still paste into description/amount fields normally.
 
 The automated tests use synthetic clipboard objects/events and never inspect or replace your real Windows clipboard. Actual Windows/WebView2 clipboard integration therefore remains a user-run check. Clipboard provenance is supported from v1.3 onward; earlier executables cannot validate that input value.
+
+## Appearance switch (v1.4.1)
+
+Use the header **Dark mode** switch: on is Dark, off is Light. Click it or focus it and press Space/Enter. The preference saves to settings.json and persists after reopening. System mode has been removed. Older missing/System preferences open in Light, while saved Light/Dark choices are preserved.
+
+The theme affects app panels and controls, including the scanner and crop tool. Receipt images and OCR pixels stay unchanged. Reopen the app to verify that the selected appearance persists. A failed settings write leaves the previous appearance active.

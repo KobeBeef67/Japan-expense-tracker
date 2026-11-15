@@ -20,6 +20,7 @@
   } from './lib/tags';
   import { tagKey } from './lib/tag-names';
   import { csvText as exportRows } from './lib/csv';
+  import { applyTheme, themePreference } from './lib/theme';
 
   // Screen, entry form, and dialog state. Nothing here writes to disk on its own.
   let scannerOpen = false;
@@ -71,6 +72,7 @@
     schemaVersion: 1,
     currency: 'JPY',
     rounding: 'half-away-from-zero',
+    theme: 'light',
     categories: [
       'Food',
       'Housing',
@@ -84,6 +86,7 @@
   };
   let settingsOpen = false,
     categoryText = '';
+  let settingsSaving = false;
 
   // Derived views: recomputed from the committed ledger when state changes.
   $: monthItems = ledger.transactions.filter((t) => t.month === month);
@@ -493,7 +496,29 @@
       error = String(e);
     }
   }
+  async function persistSettings(next: typeof settings, message: string) {
+    if (settingsSaving) return false;
+    settingsSaving = true;
+    error = '';
+    try {
+      if (native) await invoke('save_settings', { settings: next });
+      settings = next;
+      applyTheme(themePreference(settings.theme));
+      status = message;
+      return true;
+    } catch (failure) {
+      error = String(failure);
+      return false;
+    } finally {
+      settingsSaving = false;
+    }
+  }
+  async function changeTheme() {
+    const theme = themePreference(settings.theme) === 'dark' ? 'light' : 'dark';
+    await persistSettings({ ...settings, theme }, 'Theme saved');
+  }
   async function saveCategories() {
+    if (settingsSaving) return;
     try {
       const next = {
         ...settings,
@@ -506,10 +531,7 @@
           ),
         ],
       };
-      if (native) await invoke('save_settings', { settings: next });
-      settings = next;
-      settingsOpen = false;
-      status = 'Categories saved';
+      if (await persistSettings(next, 'Categories saved')) settingsOpen = false;
     } catch (e) {
       error = String(e);
     }
@@ -545,7 +567,8 @@
         ledger = data.ledger;
         path = data.path;
         recovery = data.recovery;
-        settings = data.settings;
+        settings = { ...data.settings, theme: themePreference(data.settings.theme) };
+        applyTheme(themePreference(settings.theme));
         if (data.ocrSelfTest) {
           try {
             const { ocrSelfTest } = await import('./lib/ocr-self-test');
@@ -639,6 +662,16 @@
         </h1>
       </div>
       <div class="header-actions">
+        <button
+          class="theme-toggle"
+          type="button"
+          role="switch"
+          aria-label="Dark mode"
+          aria-checked={themePreference(settings.theme) === 'dark'}
+          disabled={!loaded || settingsSaving}
+          onclick={changeTheme}
+          ><span class="switch-track" aria-hidden="true"></span>Dark mode</button
+        >
         <span class="save-status"
           >{busy ? 'Working…' : loaded ? '● Saved locally' : 'Opening…'}</span
         ><button disabled={!undoStack.length || busy} onclick={undo}>Undo <kbd>Ctrl Z</kbd></button>
@@ -662,7 +695,7 @@
           Suggestions are optional. Ambiguous descriptions such as “amazon” have no automatic
           category.
         </p>
-        <button onclick={saveCategories}>Save categories</button><button
+        <button disabled={settingsSaving} onclick={saveCategories}>Save categories</button><button
           onclick={() => (settingsOpen = false)}>Cancel</button
         >
       </section>{/if}
@@ -1212,7 +1245,7 @@
   .manage {
     margin-top: 16px;
     padding-top: 14px;
-    border-top: 1px solid #e2e9dd;
+    border-top: 1px solid var(--border-soft);
   }
   .manage h3 {
     font-size: 12px;
@@ -1229,7 +1262,7 @@
     margin: 8px 0 12px;
   }
   .bulk-controls {
-    background: #f3f6ee;
+    background: var(--surface-muted);
     padding: 10px;
     border-radius: 6px;
     margin-bottom: 12px;
@@ -1251,8 +1284,8 @@
     margin: 0;
     font-family: 'Segoe UI', sans-serif;
     font-size: 13px;
-    color: #21332f;
-    background: #f3f5f1;
+    color: var(--text);
+    background: var(--page);
   }
   :global(button),
   :global(input),
@@ -1261,39 +1294,48 @@
   }
   :global(button) {
     cursor: pointer;
-    border: 1px solid #d5ddd5;
-    background: #fff;
-    color: #263e36;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
     border-radius: 6px;
     padding: 7px 11px;
     white-space: nowrap;
   }
   :global(button:hover:not(:disabled)) {
-    background: #e8efe6;
-    border-color: #a7bcaa;
+    background: var(--surface-muted);
+    border-color: var(--border);
   }
   :global(button:disabled) {
     opacity: 0.45;
     cursor: default;
   }
   :global(button.primary) {
-    background: #245a44;
-    color: #fff;
-    border-color: #245a44;
+    background: var(--accent-solid);
+    color: var(--on-accent);
+    border-color: var(--accent-solid);
+  }
+  :global(button.primary:hover:not(:disabled)) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: var(--on-accent);
+  }
+  :global(input::placeholder) {
+    color: var(--subtle);
+    opacity: 1;
   }
   :global(input),
   :global(select) {
-    border: 1px solid #cfd9ce;
+    border: 1px solid var(--border);
     border-radius: 5px;
-    background: #fff;
+    background: var(--surface);
     padding: 8px;
-    color: #21332f;
+    color: var(--text);
     min-width: 0;
   }
   :global(input:focus),
   :global(select:focus),
   :global(button:focus-visible) {
-    outline: 2px solid #6e9972;
+    outline: 2px solid var(--focus);
     outline-offset: 1px;
   }
   :global(label) {
@@ -1301,17 +1343,17 @@
     flex-direction: column;
     gap: 5px;
     font-size: 11px;
-    color: #63746b;
+    color: var(--muted);
   }
   :global(small) {
     display: block;
     font-size: 11px;
-    color: #748278;
+    color: var(--subtle);
     line-height: 1.5;
   }
   :global(p) {
     line-height: 1.6;
-    color: #647368;
+    color: var(--muted);
   }
   :global(h2) {
     font-size: 14px;
@@ -1325,7 +1367,7 @@
     white-space: pre-wrap;
     max-height: 400px;
     overflow: auto;
-    background: #f2f5f0;
+    background: var(--surface-muted);
     padding: 12px;
   }
   :global(details) {
@@ -1333,10 +1375,10 @@
   }
   :global(summary) {
     cursor: pointer;
-    color: #326047;
+    color: var(--accent);
   }
   :global(.negative) {
-    color: #a84c39 !important;
+    color: var(--negative) !important;
   }
   .shell {
     display: flex;
@@ -1344,8 +1386,8 @@
   }
   aside {
     width: 205px;
-    background: #eaf0e7;
-    border-right: 1px solid #d8e0d5;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -1371,9 +1413,9 @@
     place-items: center;
     width: 32px;
     height: 36px;
-    background: #315e46;
+    background: var(--accent-solid);
     border-radius: 9px;
-    color: #fff;
+    color: var(--on-accent);
     font-size: 22px;
     font-weight: 400;
   }
@@ -1390,8 +1432,8 @@
     font-size: 12px;
   }
   nav button.active {
-    background: #d6e2d0;
-    color: #224c36;
+    background: var(--selected);
+    color: var(--accent);
     font-weight: 650;
   }
   .side-month {
@@ -1402,7 +1444,7 @@
   }
   .side-month > input {
     width: 100%;
-    background: #f4f7f1;
+    background: var(--surface-raised);
   }
   .month-list {
     overflow: auto;
@@ -1418,14 +1460,14 @@
     font-size: 11px;
   }
   .month-list button.chosen {
-    background: #dde8d7;
+    background: var(--selected);
   }
   .month-list span {
-    color: #83917e;
+    color: var(--subtle);
   }
   .side-bottom {
     margin-top: auto;
-    color: #62745e;
+    color: var(--muted);
     font-size: 11px;
   }
   .side-bottom button {
@@ -1444,7 +1486,7 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #5e8d54;
+    background: var(--positive);
     margin-right: 4px;
   }
   main {
@@ -1468,7 +1510,7 @@
   .eyebrow {
     font-size: 9px;
     letter-spacing: 1.7px;
-    color: #78916e;
+    color: var(--subtle);
     margin: 0;
   }
   .header-actions {
@@ -1476,35 +1518,77 @@
     gap: 15px;
     align-items: center;
   }
+  .theme-toggle,
+  .theme-toggle:hover:not(:disabled) {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .switch-track {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    border-radius: 20px;
+    background: var(--muted);
+  }
+  .switch-track::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--on-accent);
+    box-shadow: 0 1px 2px #0004;
+    transition: transform 120ms;
+  }
+  .theme-toggle[aria-checked='true'] .switch-track {
+    background: var(--accent-solid);
+  }
+  .theme-toggle[aria-checked='true'] .switch-track::after {
+    transform: translateX(16px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .switch-track::after {
+      transition: none;
+    }
+  }
   .save-status {
     font-size: 11px;
-    color: #6b8565;
+    color: var(--subtle);
   }
   kbd {
     font:
       10px 'Segoe UI',
       sans-serif;
-    color: #8a9686;
+    color: var(--subtle);
     margin-left: 9px;
   }
   .stats {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    border: 1px solid #d9e1d5;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #fff;
+    background: var(--surface);
     overflow: hidden;
   }
   .stats > div {
     padding: 17px 19px;
-    border-right: 1px solid #e8ede5;
+    border-right: 1px solid var(--border-soft);
   }
   .stats > div:last-child {
     border: 0;
   }
   .stats span {
     font-size: 11px;
-    color: #6e7e6c;
+    color: var(--muted);
   }
   .stats strong {
     display: block;
@@ -1515,23 +1599,23 @@
     font-variant-numeric: tabular-nums;
   }
   .stats .highlight {
-    background: #e4eddf;
+    background: var(--selected);
   }
   .savings-line {
     display: flex;
     justify-content: space-between;
     margin: 13px 2px 24px;
     font-size: 11px;
-    color: #71806a;
+    color: var(--muted);
     gap: 10px;
   }
   .savings-line b {
     margin-left: 9px;
-    color: #375c3b;
+    color: var(--accent);
   }
   .card {
-    border: 1px solid #dbe2d7;
-    background: #fff;
+    border: 1px solid var(--border);
+    background: var(--surface);
     border-radius: 8px;
     padding: 17px 18px;
     margin-bottom: 16px;
@@ -1591,12 +1675,12 @@
   }
   .entry-help {
     margin-top: 10px;
-    color: #87917f;
+    color: var(--subtle);
     font-size: 10px;
   }
   .link {
     border: none;
-    color: #52794b;
+    color: var(--accent);
     font-size: 10px;
     background: transparent;
     padding: 5px 0;
@@ -1608,7 +1692,7 @@
     align-items: center;
     margin: 0 0 16px;
     font-size: 10px;
-    color: #7c8a73;
+    color: var(--subtle);
   }
   .recurring button {
     font-size: 10px;
@@ -1637,7 +1721,7 @@
     margin: 0;
   }
   .count {
-    background: #edf2e9;
+    background: var(--surface-muted);
     border-radius: 4px;
     font-size: 10px;
     font-weight: 400;
@@ -1659,18 +1743,18 @@
   th {
     font-weight: 500;
     text-align: left;
-    color: #85917c;
+    color: var(--subtle);
     font-size: 10px;
-    background: #f7f9f4;
+    background: var(--surface-raised);
     padding: 9px 10px;
-    border-bottom: 1px solid #e0e6dc;
+    border-bottom: 1px solid var(--border-soft);
     position: sticky;
     top: 0;
     z-index: 1;
   }
   td {
     padding: 10px;
-    border-bottom: 1px solid #edf0e9;
+    border-bottom: 1px solid var(--border-soft);
     vertical-align: top;
   }
   td small {
@@ -1689,13 +1773,13 @@
     font-weight: 550;
   }
   .income {
-    color: #3d7e51;
+    color: var(--positive);
   }
   .date-cell {
     width: 110px;
     white-space: nowrap;
     font-size: 11px;
-    color: #5f725d;
+    color: var(--muted);
   }
   .actions {
     white-space: nowrap;
@@ -1707,20 +1791,20 @@
     margin-left: 3px;
   }
   .delete {
-    color: #a86550;
+    color: var(--negative);
   }
   .flags {
-    color: #a07b34;
+    color: var(--warning-text);
     font-size: 10px;
     max-width: 280px;
   }
   .source {
-    color: #a0aa97;
+    color: var(--subtle);
     font-size: 9px;
   }
   .badge {
     font-size: 9px;
-    background: #e9efe5;
+    background: var(--surface-muted);
     padding: 2px 4px;
     margin-left: 6px;
   }
@@ -1728,12 +1812,12 @@
     display: flex;
     justify-content: space-between;
     padding: 12px 0;
-    color: #7b8971;
+    color: var(--subtle);
     font-size: 10px;
   }
   .table-footer b {
     margin-left: 7px;
-    color: #415f40;
+    color: var(--accent);
   }
   .empty {
     text-align: center;
@@ -1752,7 +1836,7 @@
   }
   .no-results {
     text-align: center;
-    color: #87917f;
+    color: var(--subtle);
     padding: 30px;
   }
   .notice,
@@ -1762,12 +1846,12 @@
     margin-bottom: 15px;
     font-size: 12px;
     line-height: 1.6;
-    background: #f3ecd9;
-    color: #8b6b31;
+    background: var(--warning-bg);
+    color: var(--warning-text);
   }
   .error {
-    background: #fbe8e0;
-    color: #98442d;
+    background: var(--danger-bg);
+    color: var(--danger-text);
   }
   .notice button,
   .error button {
@@ -1804,7 +1888,7 @@
   }
   footer {
     font-size: 10px;
-    color: #7b8b71;
+    color: var(--subtle);
     line-height: 1.5;
     padding: 0 3px 10px;
     overflow-wrap: anywhere;

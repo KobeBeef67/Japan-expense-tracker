@@ -224,6 +224,7 @@ impl Store {
   "schemaVersion": 1,
   "currency": "JPY",
   "rounding": "half-away-from-zero",
+  "theme": "light",
   "categories": [
     "Food", "Housing", "Transport", "Bills",
     "Shopping", "Entertainment", "Travel", "Health"

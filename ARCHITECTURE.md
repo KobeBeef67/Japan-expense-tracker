@@ -187,3 +187,11 @@ A photo's transient OCR mode is either `receipt` (Japanese + English, block segm
 `receipt-clipboard.ts` extracts only image file items from a paste event, using `files` as a fallback without duplicating representations. Explicit clipboard reads choose one PNG/JPEG representation per item and never read text/HTML or fetch URLs. `ReceiptScanner.svelte` owns the paste listener only while mounted. Ctrl+V follows the event path; the button invokes `navigator.clipboard.read()` only on a deliberate click.
 
 Clipboard images enter `setImage` through the same validation, preparation, session memory limits, crop and review path as files. Paste is blocked during recognition, cropping, saving or image preparation. Generation checks discard results arriving after close/cancel. The clipboard is never written or polled. Native receipt validation permits `clipboard` alongside existing input kinds without adding image payload fields or changing the JSON structure.
+
+### Appearance and settings
+
+`src/theme.css` defines shared semantic colours for both palettes. Components consume variables rather than separate dark-only overrides. `src/lib/theme.ts` normalizes legacy/missing preferences to Light and sets `data-theme` on the root element. `src/main.ts` applies Light before mounting; native settings override it once loaded. The header uses an accessible button with role=switch and aria-checked, supporting native keyboard activation. The app does not follow OS appearance changes. Native form controls follow `color-scheme`. Camera/crop overlays and photo pixels keep their original colours.
+
+Theme and category saves share `persistSettings` and a busy guard, preventing overlapping settings snapshots from dropping a newer preference. The theme is applied after a successful save; failure leaves the saved theme active and the switch unchanged. Browser preview stays memory-only.
+
+`src-tauri/src/settings.rs` validates optional `theme: light | dark`, accepts legacy settings without it, creates a dated settings backup, then atomically replaces the JSON file. The native command holds the existing store mutex during this operation. Ledger schema and settings schema versions are unchanged because theme is an optional field. Settings tests exercise native readback, invalid-write rejection and byte-for-byte preservation of a separate ledger file.

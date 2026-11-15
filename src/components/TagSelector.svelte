@@ -78,10 +78,10 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    border: 1px solid #d3dece;
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 5px;
-    background: white;
+    background: var(--surface);
     flex-wrap: wrap;
   }
   .box input {
@@ -100,7 +100,7 @@
   }
   .chips button {
     border: 0;
-    background: #e1ecd8;
+    background: var(--selected);
     border-radius: 5px;
     padding: 4px 7px;
     font-size: 11px;
@@ -116,10 +116,10 @@
     padding: 3px 6px;
   }
   .tag-error {
-    color: #9b4f34;
+    color: var(--danger-text);
   }
   small {
     font-size: 10px;
-    color: #819178;
+    color: var(--subtle);
   }
 </style>

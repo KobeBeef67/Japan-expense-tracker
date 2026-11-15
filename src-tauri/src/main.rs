@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod migration;
+mod settings;
 mod storage;
 use serde_json::{json, Value};
 use std::sync::Mutex;
@@ -87,22 +88,8 @@ fn restore(name: String, state: State<AppState>) -> Result<Value, String> {
 #[tauri::command]
 /// Preserve the previous settings before replacing the current JSON file.
 fn save_settings(settings: Value, state: State<AppState>) -> Result<(), String> {
-    if settings["schemaVersion"] != 1 || settings["categories"].as_array().is_none() {
-        return Err("Invalid settings".into());
-    }
     let store = state.store.lock().map_err(|e| e.to_string())?;
-    let old = std::fs::read(store.dir.join("settings.json")).map_err(|e| e.to_string())?;
-    storage::atomic(
-        &store.dir.join("backups").join(format!(
-            "settings-{}.json",
-            chrono::Utc::now().timestamp_millis()
-        )),
-        &old,
-    )?;
-    storage::atomic(
-        &store.dir.join("settings.json"),
-        &serde_json::to_vec_pretty(&settings).map_err(|e| e.to_string())?,
-    )
+    settings::save(&store.dir, &settings)
 }
 #[tauri::command]
 /// Add a UTF-8 BOM for spreadsheet compatibility and save beside the ledger.
